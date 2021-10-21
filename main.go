@@ -16,6 +16,8 @@ import (
 	"golang.org/x/text/transform"
 )
 
+// 文字エンコードを取得
+// https://moxtsuan.hatenablog.com/entry/nkf-go
 func charDet(b []byte) (string, error) {
 	d := chardet.NewTextDetector()
 	res, err := d.DetectBest(b)
@@ -24,10 +26,6 @@ func charDet(b []byte) (string, error) {
 	}
 	return res.Charset, nil
 }
-
-/*
-Only detect Character encoding
-*/
 func Guess(file *os.File) (string, error) {
 	input, err := ioutil.ReadAll(file)
 	file.Seek(0, 0)
@@ -75,9 +73,6 @@ loop:
 	return l, err
 }
 
-// 試したいこと
-// https://dev.classmethod.jp/articles/golang-iconv/
-
 // https://qiita.com/KemoKemo/items/d135ddc93e6f87008521
 func getFileNameWithoutExt(path string) string {
 	// Fixed with a nice method given by mattn-san
@@ -89,7 +84,6 @@ func main() {
 		panic("ファイルを指定してください")
 	}
 	filepath := filepath.Base(os.Args[1])
-	// filepath := "DMR-08 エピソード2 グレイト・ミラクル 〜セブン・ヒーローVer．〜sjis.csv"
 	srcFile, err := os.Open(filepath)
 	if err != nil {
 		log.Fatal(err)
