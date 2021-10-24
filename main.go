@@ -73,28 +73,47 @@ loop:
 	return l, err
 }
 
-// https://qiita.com/KemoKemo/items/d135ddc93e6f87008521
-func getFileNameWithoutExt(path string) string {
-	// Fixed with a nice method given by mattn-san
-	return filepath.Base(path[:len(path)-len(filepath.Ext(path))])
-}
-func main() {
-	// utf-8ファイルを開く
-	if len(os.Args) < 2 {
-		panic("ファイルを指定してください")
+func ParseArgs() (string, string) {
+	argsCount := len(os.Args)
+	if argsCount < 2 {
+		panic("引数を指定してください")
 	}
-	filepath := filepath.Base(os.Args[1])
-	srcFile, err := os.Open(filepath)
+	var inputPath string
+	outputPath := "convert"
+	// 引数パース
+	for i := 1; i < argsCount; i++ {
+		if i+1 >= argsCount {
+			panic("引数の指定が不正です")
+		}
+		i += 1
+		switch os.Args[i-1] {
+		case "-i":
+			inputPath = os.Args[i]
+		case "-o":
+			outputPath = os.Args[i]
+		default:
+			panic("引数の形式が違います")
+		}
+	}
+	return inputPath, outputPath
+}
+func ConvertEncode(input_path, output_path string, output_is_dir bool) {
+	srcFile, err := os.Open(input_path)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer srcFile.Close()
-	if err := os.Mkdir("convert", 0777); err != nil {
-		fmt.Println(err)
+	var outputPath string
+	if output_is_dir {
+		if err := os.Mkdir(output_path, 0777); err != nil {
+			fmt.Println(err)
+		}
+		outputPath = output_path + "/" + filepath.Base(input_path)
+	} else {
+		outputPath = output_path
 	}
-	filepath = "convert/" + filepath
 	// 書き込み先ファイルを用意
-	dstFile, err := os.Create(filepath)
+	dstFile, err := os.Create(outputPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -114,5 +133,41 @@ func main() {
 	if err := s.Err(); err != nil {
 		log.Fatal(err)
 	}
+
+}
+func TraverseDirectory(directory, output_path string, output_is_dir bool, work func(string, string, bool)) {
+	files, err := ioutil.ReadDir(directory)
+	if err != nil {
+		panic(err)
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			TraverseDirectory(directory+"/"+file.Name(), output_path, output_is_dir, work)
+		} else {
+			work(directory+"/"+file.Name(), output_path, output_is_dir)
+		}
+	}
+
+}
+func main() {
+	inputPath, outputPath := ParseArgs()
+	inputInfo, err := os.Stat(inputPath)
+	if err != nil {
+		panic("引数のパスを見直してください")
+	}
+	isInputDir := inputInfo.IsDir()
+	if isInputDir && filepath.Ext(outputPath) != "" {
+		panic("引数のディレクトリ関係が不正です")
+	}
+	outputInfo, err := os.Stat(outputPath)
+	if err != nil {
+		os.Mkdir(outputPath, 0777)
+		outputInfo, err = os.Stat(outputPath)
+		if err != nil {
+			panic("引数のパスを見直してください")
+		}
+	}
+	isOutputDir := outputInfo.IsDir()
+	TraverseDirectory(inputPath, outputPath, isOutputDir, ConvertEncode)
 	log.Println("done")
 }
