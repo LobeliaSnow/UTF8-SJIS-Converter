@@ -42,10 +42,6 @@ func IsUTF8(fp *os.File) bool {
 
 // utf8-sjis間で対応していない文字を置き換え
 // https://teratail.com/questions/106106
-const (
-	NO_BREAK_SPACE = "\u00A0"
-	WAVE_DASH      = "\u301C"
-)
 
 type runeWriter struct {
 	w io.Writer
@@ -56,9 +52,12 @@ func (rw *runeWriter) Write(b []byte) (int, error) {
 	l := 0
 loop:
 	for len(b) > 0 {
-		_, n := utf8.DecodeRune(b)
-		if n == 0 {
-			break loop
+		runeErr, n := utf8.DecodeRune(b)
+		if runeErr == '\uFFFD' {
+			_, err = rw.w.Write([]byte{'?'})
+			l += n
+			b = b[n:]
+			continue
 		}
 		_, err = rw.w.Write(b[:n])
 		if err != nil {
@@ -71,6 +70,11 @@ loop:
 		b = b[n:]
 	}
 	return l, err
+}
+
+func IsExist(filename string) bool {
+	_, err := os.Stat(filename)
+	return err == nil
 }
 
 func ParseArgs() (string, string) {
@@ -105,8 +109,10 @@ func ConvertEncode(input_path, output_path string, output_is_dir bool) {
 	defer srcFile.Close()
 	var outputPath string
 	if output_is_dir {
-		if err := os.Mkdir(output_path, 0777); err != nil {
-			fmt.Println(err)
+		if !IsExist(output_path) {
+			if err := os.Mkdir(output_path, 0777); err != nil {
+				fmt.Println(err)
+			}
 		}
 		outputPath = output_path + "/" + filepath.Base(input_path)
 	} else {
@@ -135,14 +141,18 @@ func ConvertEncode(input_path, output_path string, output_is_dir bool) {
 	}
 
 }
-func TraverseDirectory(directory, output_path string, output_is_dir bool, work func(string, string, bool)) {
+func TraverseDirectory(directory, output_path string, input_is_dir, output_is_dir bool, work func(string, string, bool)) {
+	if !input_is_dir {
+		work(directory, output_path, output_is_dir)
+		return
+	}
 	files, err := ioutil.ReadDir(directory)
 	if err != nil {
 		panic(err)
 	}
 	for _, file := range files {
 		if file.IsDir() {
-			TraverseDirectory(directory+"/"+file.Name(), output_path, output_is_dir, work)
+			TraverseDirectory(directory+"/"+file.Name(), output_path+"/"+file.Name(), input_is_dir, output_is_dir, work)
 		} else {
 			work(directory+"/"+file.Name(), output_path, output_is_dir)
 		}
@@ -151,6 +161,8 @@ func TraverseDirectory(directory, output_path string, output_is_dir bool, work f
 }
 func main() {
 	inputPath, outputPath := ParseArgs()
+	// inputPath := "C:/Users/black/Desktop/Lobelia-Engine/DM-Tools/Script/MasterMaker/master"
+	// outputPath := "C:/Users/black/Desktop/Lobelia-Engine/DM-Tools/Master"
 	inputInfo, err := os.Stat(inputPath)
 	if err != nil {
 		panic("引数のパスを見直してください")
@@ -168,6 +180,6 @@ func main() {
 		}
 	}
 	isOutputDir := outputInfo.IsDir()
-	TraverseDirectory(inputPath, outputPath, isOutputDir, ConvertEncode)
+	TraverseDirectory(inputPath, outputPath, isInputDir, isOutputDir, ConvertEncode)
 	log.Println("done")
 }
